@@ -1,6 +1,7 @@
 {
-  "username": "foo",
-  "client_id": "111",
-  "token": "oauth:222",
-  "channel": "bar"
+  "username": "",
+  "channel": "",
+  "client_id": "",
+  "client_secret": "",
+  "access_token": ""
 }
