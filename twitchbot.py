@@ -17,7 +17,12 @@ from twitchapi import TwitchAPI
 
 SERVER = 'irc.chat.twitch.tv'
 PORT = 6667
-MOTDS = ['Safety First', 'There is always money in the banana stand']
+MOTDS = [
+  'Safety First',
+  'There is always money in the banana stand',
+  'Accept who you are. Unless you are a serial killer.',
+  'If a book about failures does not sell, is it a success?'
+]
 
 
 class TwitchBot(irc.bot.SingleServerIRCBot):
@@ -57,11 +62,11 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
     self.twitch = TwitchAPI()
 
     # Create IRC bot connection
-    print(f"Connecting to {SERVER} on port {PORT}...")
+    print(f"ChrisBadaBot: Connecting to {SERVER} on port {PORT}...")
     irc.bot.SingleServerIRCBot.__init__(self, [(SERVER, PORT, f"oauth:{self.twitch.token}")], username, username)
 
   def on_welcome(self, conn, event):
-    print(f"Joining {self.channel}")
+    print(f"ChrisBadaBot: Joining {self.channel}")
     # You must request specific capabilities before you can use them
     conn.cap('REQ', ':twitch.tv/membership')
     conn.cap('REQ', ':twitch.tv/tags')
@@ -70,33 +75,33 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
     self.connection.privmsg(self.channel, 'has entered the chat!')
 
   def on_motd(self, conn, event):
-    print(f"on_motd...")
+    print(f"ChrisBadaBot: on_motd...")
     self.connection.privmsg(self.channel, f'Message of the Day: {random.choice(MOTDS)}')
 
   def on_part(self, conn, event):
     # self.connection.privmsg(self.channel, 'peace out cub scouts')
-    print('on_part...')
+    print('ChrisBadaBot: on_part...')
     self.connection.part([self.channel], 'Peace out cub scouts!')
 
   def on_pubmsg(self, conn, event):
-    print('on_pubmsg...')
+    print('ChrisBadaBot: on_pubmsg...')
     if event.arguments[0][:1] == '!':
       # If a chat message starts with an exclamation point, try to run it as a command
       cmd = event.arguments[0].split(' ')[0][1:]
-      print('Received command: ' + cmd)
+      print('ChrisBadaBot: Received command: ' + cmd)
       self.execute(event, cmd)
 
   def execute(self, event, cmd):
-    print('execute...')
+    print('ChrisBadaBot: execute...')
 
     if cmd == "game":
       # Poll the API to get current game.
-      response = self.call_twitch()
+      response = self.twitch.get_channel()
       self.connection.privmsg(self.channel, f"{response['display_name']} is currently playing{response['game']}")
 
     elif cmd == "title":
       # Poll the API the get the current status of the stream
-      response = self.call_twitch()
+      response = self.twitch.get_channel()
       self.connection.privmsg(self.channel, f"{response['display_name']} channel title is currently {response['status']}")
 
     elif cmd == "raffle":
@@ -119,6 +124,7 @@ def main():
     bot.start()
   except KeyboardInterrupt:
     bot.on_part(None, None)  # TODO not working
+    print('ChrisBadaBot: We outtie!')
 
 
 if __name__ == "__main__":

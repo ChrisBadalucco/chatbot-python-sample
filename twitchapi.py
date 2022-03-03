@@ -6,6 +6,7 @@ import webbrowser
 from socket import socket
 
 import requests
+from requests import HTTPError
 
 SCOPES = 'chat:edit chat:read'
 CLAIMS = ''
@@ -20,7 +21,7 @@ class TwitchAPI:
         creds = json.load(file)
         client_id = creds['client_id']
         client_secret = creds['client_secret']
-        last_token = creds['token'] or None
+        last_token = creds['access_token'] or None
 
     self.client_id = client_id
     self.client_secret = client_secret
@@ -28,7 +29,7 @@ class TwitchAPI:
 
   def _get(self, url, headers=None, queryparams=None):
     headers = headers or {
-      'Authorization': f'Bearer {self.access_token}',
+      'Authorization': f'Bearer {self.token}',
       'Accept': 'application/json',
       'Client-ID': self.client_id
     }
@@ -58,10 +59,12 @@ class TwitchAPI:
 
   def get_valid_access_token(self, token=None):
     if token:
-      response = self.validate_token(token).json()
-      if 'status' in response and response.get('status') == 200: # could do this via raise_for_status and use try/except
+      try:
+        self.validate_token(token)
         print('TwitchAPI: Token is valid.')
         return token
+      except HTTPError:
+        pass
 
     print('TwitchAPI: Token is invalid. Attempting to retrieve a new auth code.')
     code = self.get_auth_code()
@@ -78,7 +81,7 @@ class TwitchAPI:
       "scope": SCOPES
     }
     webbrowser.open(f"https://id.twitch.tv/oauth2/authorize?{urllib.parse.urlencode(auth_parms)}")
-    with socket.socket() as s:
+    with socket() as s:
       s.bind(("127.0.0.1", 8337))
       s.listen()
       print("TwitchAPI: Waiting for request...")
@@ -97,8 +100,11 @@ class TwitchAPI:
         # we expect a browser to be requesting the root page, but all we really care about is the code which is included in the first line.
         # For more info, look into how HTTP works.
         firstline = data.splitlines()[0]
-        code = re.match(r"GET /\?code=(?P<code>.*)&scope=(?P<scopes>.*) HTTP/(?P<version>.*)",
-                        firstline).group("code")
+        start = firstline.find('?code=')
+        start += 6
+        end = start + 30
+        code = firstline[start:end]
+        # code = re.match(r"GET /\?code=(?P<code>.*)&scope=(?P<SCOPES>.*) HTTP/(?P<version>.*)", firstline).group("code")
         print(f"TwitchAPI: Received code {code} from browser!")
         content = "Thank you, code received".encode("utf-8")
         response = f"HTTP/1.1 200 OK\r\nHost: localhost\r\nServer: ChrisBadaBotTwitch/1.1\r\nContent-Type: text/plain\r\nContent-Length: {len(content)} \r\n\r\n"
@@ -116,6 +122,7 @@ class TwitchAPI:
       "redirect_uri": REDIRECT_URI
     }
     response = self._post("https://id.twitch.tv/oauth2/token", queryparams=params)
+    print(f"TwitchAPI: Received token {response['access_token']}")
     return response['access_token']
 
   def get_channel(self):
