@@ -42,20 +42,32 @@ class TwitchAPI:
     response.raise_for_status()
     return response.json()
 
+  def _save_token(self, token):
+    creds = {
+      'client_id': self.client_id,
+      'client_secret': self.client_secret,
+      'access_token': token
+    }
+    with open("api-creds.json", "w") as f:
+      f.write(json.dumps(creds))
+    print("TwitchAPI: Token stored successfully.")
+
   def validate_token(self, token):
     bearer_token = f"Bearer {token}"
     return self._get(url="https://id.twitch.tv/oauth2/validate", headers={"Authorization": bearer_token})
 
   def get_valid_access_token(self, token=None):
-    response = self.validate_token(token).json()
-    if 'status' in response and response.get('status') == 200: # could do this via raise_for_status and use try/except
-      print('TwitchAPI: token is valid.')
-      return token
+    if token:
+      response = self.validate_token(token).json()
+      if 'status' in response and response.get('status') == 200: # could do this via raise_for_status and use try/except
+        print('TwitchAPI: Token is valid.')
+        return token
 
-    print('TwitchAPI: token is invalid. Attempting to retrieve a new token.')
+    print('TwitchAPI: Token is invalid. Attempting to retrieve a new auth code.')
     code = self.get_auth_code()
-    print("TwitchAPI: Exchanging code for token...")
+    print("TwitchAPI: Exchanging code for token.")
     token = self.exchange_auth_code_for_token(code)
+    self._save_token(token)
     return token
 
   def get_auth_code(self):
@@ -72,13 +84,13 @@ class TwitchAPI:
       print("TwitchAPI: Waiting for request...")
       conn, addr = s.accept()
       with conn:
-        print("TwitchAPI: received a connection...")
+        print("TwitchAPI: Received a connection...")
         data = ""
         while True:
           currdata = conn.recv(1024)
           if not currdata:
             break
-          print("TwitchAPI: received: " + str(currdata.decode('utf-8')))
+          print("TwitchAPI: Received: " + str(currdata.decode('utf-8')))
           data += str(currdata.decode('utf-8'))
           if data.endswith("\r\n\r\n"):  # means we are at the end of the header request
             break
@@ -87,7 +99,7 @@ class TwitchAPI:
         firstline = data.splitlines()[0]
         code = re.match(r"GET /\?code=(?P<code>.*)&scope=(?P<scopes>.*) HTTP/(?P<version>.*)",
                         firstline).group("code")
-        print(f"TwitchAPI: received code {code} from browser!")
+        print(f"TwitchAPI: Received code {code} from browser!")
         content = "Thank you, code received".encode("utf-8")
         response = f"HTTP/1.1 200 OK\r\nHost: localhost\r\nServer: ChrisBadaBotTwitch/1.1\r\nContent-Type: text/plain\r\nContent-Length: {len(content)} \r\n\r\n"
         conn.sendall((response).encode("utf-8") + content)
