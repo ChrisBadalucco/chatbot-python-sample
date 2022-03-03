@@ -12,7 +12,8 @@ import os
 import random
 
 import irc.bot
-import requests
+
+from twitchapi import TwitchAPI
 
 SERVER = 'irc.chat.twitch.tv'
 PORT = 6667
@@ -43,14 +44,21 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
     called (if it exists) by runtime class introspection.
   '''
 
-  def __init__(self, username, client_id, token, channel):
-    self.client_id = client_id
-    self.token = token
-    self.channel = '#' + channel
+  def __init__(self):
+    filepath = 'bot-creds.json'
+    if os.path.isfile(filepath):
+      with open(filepath, 'r') as file:
+        creds = json.load(file)
+        username = creds['username']
+        channel = creds['channel']
+
+    self.channel = f"#{channel}"
+
+    self.twitch = TwitchAPI()
 
     # Create IRC bot connection
     print(f"Connecting to {SERVER} on port {PORT}...")
-    irc.bot.SingleServerIRCBot.__init__(self, [(SERVER, PORT, token)], username, username)
+    irc.bot.SingleServerIRCBot.__init__(self, [(SERVER, PORT, f"oauth:{self.twitch.token}")], username, username)
 
   def on_welcome(self, conn, event):
     print(f"Joining {self.channel}")
@@ -104,31 +112,13 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
       # The command was not recognized
       self.connection.privmsg(self.channel, f"Did not understand command: {cmd}")
 
-  def call_twitch(self, url='https://api.twitch.tv/helix/channels/', headers=None):
-    # url = f"https://api.twitch.tv/helix/channels/{self.channel_id}"
-    all_headers = {'Client-ID': self.client_id, 'Accept': 'application/json'}.update(headers or {})
-    response = requests.get(url, headers=all_headers)
-    response.raise_for_status()
-    response = response.json()
-    return response
-
 
 def main():
-  username = client_id = token = channel = None
-  filepath = 'creds.json'
-  if os.path.isfile(filepath):
-    with open(filepath, 'r') as file:
-      creds = json.load(file)
-      username = creds['username']
-      client_id = creds['client_id']
-      token = creds['token']
-      channel = creds['channel']
-
-  bot = TwitchBot(username, client_id, token, channel)
+  bot = TwitchBot()
   try:
     bot.start()
   except KeyboardInterrupt:
-    bot.on_part(None, None)
+    bot.on_part(None, None)  # TODO not working
 
 
 if __name__ == "__main__":
