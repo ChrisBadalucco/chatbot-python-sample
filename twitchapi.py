@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import urllib
 import webbrowser
 from socket import socket
@@ -9,7 +8,8 @@ from typing import Literal
 import requests
 from requests import HTTPError
 
-SCOPES = 'chat:edit chat:read whispers:edit whispers:read'
+# https://dev.twitch.tv/docs/irc/guide for list of irc commands and required scopes
+SCOPES = 'chat:edit chat:read whispers:edit whispers:read channel:moderate'
 CLAIMS = ''
 REDIRECT_URI = 'http://localhost:8337/redirect'
 

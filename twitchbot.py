@@ -88,13 +88,16 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
     if event.arguments[0][:1] == '!':
       # If a chat message starts with an exclamation point, try to run it as a command
       cmd = event.arguments[0].split(' ')[0][1:]
-      print('ChrisBadaBot: Received command: ' + cmd)
-      self.execute(event, cmd)
+      print(f'ChrisBadaBot: Received command: {cmd}')
+      self.execute_command(event, cmd)
 
-  def execute(self, event, cmd):
-    print('ChrisBadaBot: execute...')
+  def execute_command(self, event, cmd):
+    print('ChrisBadaBot: execute_command...')
 
-    if cmd == "game":
+    if cmd == 'test':
+      self.connection.privmsg(self.channel, 'Test PASSED with flying colors!')
+
+    elif cmd == "game":
       # Poll the API to get current game.
       response = self.twitch.get_channel()
       self.connection.privmsg(self.channel, f"{response['display_name']} is currently playing{response['game']}")
