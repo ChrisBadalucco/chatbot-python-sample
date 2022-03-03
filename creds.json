@@ -1,0 +1,6 @@
+{
+  "username": "foo",
+  "client_id": "111",
+  "token": "oauth:222",
+  "channel": "bar"
+}

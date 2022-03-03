@@ -7,89 +7,129 @@ Licensed under the Apache License, Version 2.0 (the "License"). You may not use 
 
 or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
 '''
+import json
+import os
+import random
 
-import sys
 import irc.bot
 import requests
 
+SERVER = 'irc.chat.twitch.tv'
+PORT = 6667
+MOTDS = ['Safety First', 'There is always money in the banana stand']
+
+
 class TwitchBot(irc.bot.SingleServerIRCBot):
-    def __init__(self, username, client_id, token, channel):
-        self.client_id = client_id
-        self.token = token
-        self.channel = '#' + channel
+  '''
+  From irc/client.py:
 
-        # Get the channel id, we will need this for v5 API calls
-        url = 'https://api.twitch.tv/kraken/users?login=' + channel
-        headers = {'Client-ID': client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
-        r = requests.get(url, headers=headers).json()
-        self.channel_id = r['users'][0]['_id']
+  class SimpleIRCClient:
+    """A simple single-server IRC client class.
 
-        # Create IRC bot connection
-        server = 'irc.chat.twitch.tv'
-        port = 6667
-        print 'Connecting to ' + server + ' on port ' + str(port) + '...'
-        irc.bot.SingleServerIRCBot.__init__(self, [(server, port, 'oauth:'+token)], username, username)
-        
+    This is an example of an object-oriented wrapper of the IRC
+    framework.  A real IRC client can be made by subclassing this
+    class and adding appropriate methods.
 
-    def on_welcome(self, c, e):
-        print 'Joining ' + self.channel
+    The method on_join will be called when a "join" event is created
+    (which is done when the server sends a JOIN messsage/command),
+    on_privmsg will be called for "privmsg" events, and so on.  The
+    handler methods get two arguments: the connection object (same as
+    self.connection) and the event object.
 
-        # You must request specific capabilities before you can use them
-        c.cap('REQ', ':twitch.tv/membership')
-        c.cap('REQ', ':twitch.tv/tags')
-        c.cap('REQ', ':twitch.tv/commands')
-        c.join(self.channel)
+    Functionally, any of the event names in `events.py` may be subscribed
+    to by prefixing them with `on_`, and creating a function of that
+    name in the child-class of `SimpleIRCClient`. When the event of
+    `event_name` is received, the appropriately named method will be
+    called (if it exists) by runtime class introspection.
+  '''
 
-    def on_pubmsg(self, c, e):
+  def __init__(self, username, client_id, token, channel):
+    self.client_id = client_id
+    self.token = token
+    self.channel = '#' + channel
 
-        # If a chat message starts with an exclamation point, try to run it as a command
-        if e.arguments[0][:1] == '!':
-            cmd = e.arguments[0].split(' ')[0][1:]
-            print 'Received command: ' + cmd
-            self.do_command(e, cmd)
-        return
+    # Create IRC bot connection
+    print(f"Connecting to {SERVER} on port {PORT}...")
+    irc.bot.SingleServerIRCBot.__init__(self, [(SERVER, PORT, token)], username, username)
 
-    def do_command(self, e, cmd):
-        c = self.connection
+  def on_welcome(self, conn, event):
+    print(f"Joining {self.channel}")
+    # You must request specific capabilities before you can use them
+    conn.cap('REQ', ':twitch.tv/membership')
+    conn.cap('REQ', ':twitch.tv/tags')
+    conn.cap('REQ', ':twitch.tv/commands')
+    conn.join(self.channel)
+    self.connection.privmsg(self.channel, 'has entered the chat!')
 
-        # Poll the API to get current game.
-        if cmd == "game":
-            url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
-            headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
-            r = requests.get(url, headers=headers).json()
-            c.privmsg(self.channel, r['display_name'] + ' is currently playing ' + r['game'])
+  def on_motd(self, conn, event):
+    print(f"on_motd...")
+    self.connection.privmsg(self.channel, f'Message of the Day: {random.choice(MOTDS)}')
 
-        # Poll the API the get the current status of the stream
-        elif cmd == "title":
-            url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
-            headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
-            r = requests.get(url, headers=headers).json()
-            c.privmsg(self.channel, r['display_name'] + ' channel title is currently ' + r['status'])
+  def on_part(self, conn, event):
+    # self.connection.privmsg(self.channel, 'peace out cub scouts')
+    print('on_part...')
+    self.connection.part([self.channel], 'Peace out cub scouts!')
 
-        # Provide basic information to viewers for specific commands
-        elif cmd == "raffle":
-            message = "This is an example bot, replace this text with your raffle text."
-            c.privmsg(self.channel, message)
-        elif cmd == "schedule":
-            message = "This is an example bot, replace this text with your schedule text."            
-            c.privmsg(self.channel, message)
+  def on_pubmsg(self, conn, event):
+    print('on_pubmsg...')
+    if event.arguments[0][:1] == '!':
+      # If a chat message starts with an exclamation point, try to run it as a command
+      cmd = event.arguments[0].split(' ')[0][1:]
+      print('Received command: ' + cmd)
+      self.execute(event, cmd)
 
-        # The command was not recognized
-        else:
-            c.privmsg(self.channel, "Did not understand command: " + cmd)
+  def execute(self, event, cmd):
+    print('execute...')
+
+    if cmd == "game":
+      # Poll the API to get current game.
+      response = self.call_twitch()
+      self.connection.privmsg(self.channel, f"{response['display_name']} is currently playing{response['game']}")
+
+    elif cmd == "title":
+      # Poll the API the get the current status of the stream
+      response = self.call_twitch()
+      self.connection.privmsg(self.channel, f"{response['display_name']} channel title is currently {response['status']}")
+
+    elif cmd == "raffle":
+      # Provide basic information to viewers for specific commands
+      message = "This is an example bot, replace this text with your raffle text."
+      self.connection.privmsg(self.channel, message)
+
+    elif cmd == "schedule":
+      message = "This is an example bot, replace this text with your schedule text."
+      self.connection.privmsg(self.channel, message)
+
+    else:
+      # The command was not recognized
+      self.connection.privmsg(self.channel, f"Did not understand command: {cmd}")
+
+  def call_twitch(self, url='https://api.twitch.tv/helix/channels/', headers=None):
+    # url = f"https://api.twitch.tv/helix/channels/{self.channel_id}"
+    all_headers = {'Client-ID': self.client_id, 'Accept': 'application/json'}.update(headers or {})
+    response = requests.get(url, headers=all_headers)
+    response.raise_for_status()
+    response = response.json()
+    return response
+
 
 def main():
-    if len(sys.argv) != 5:
-        print("Usage: twitchbot <username> <client id> <token> <channel>")
-        sys.exit(1)
+  username = client_id = token = channel = None
+  filepath = 'creds.json'
+  if os.path.isfile(filepath):
+    with open(filepath, 'r') as file:
+      creds = json.load(file)
+      username = creds['username']
+      client_id = creds['client_id']
+      token = creds['token']
+      channel = creds['channel']
 
-    username  = sys.argv[1]
-    client_id = sys.argv[2]
-    token     = sys.argv[3]
-    channel   = sys.argv[4]
-
-    bot = TwitchBot(username, client_id, token, channel)
+  bot = TwitchBot(username, client_id, token, channel)
+  try:
     bot.start()
+  except KeyboardInterrupt:
+    bot.on_part(None, None)
+
 
 if __name__ == "__main__":
-    main()
+  main()
