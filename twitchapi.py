@@ -4,11 +4,12 @@ import re
 import urllib
 import webbrowser
 from socket import socket
+from typing import Literal
 
 import requests
 from requests import HTTPError
 
-SCOPES = 'chat:edit chat:read'
+SCOPES = 'chat:edit chat:read whispers:edit whispers:read'
 CLAIMS = ''
 REDIRECT_URI = 'http://localhost:8337/redirect'
 
@@ -21,15 +22,20 @@ class TwitchAPI:
         creds = json.load(file)
         client_id = creds['client_id']
         client_secret = creds['client_secret']
-        last_token = creds['access_token'] or None
+        last_user_token = creds['user_access_token'] or None
+        last_app_token = creds['app_access_token'] or None
 
     self.client_id = client_id
     self.client_secret = client_secret
-    self.token = self.get_valid_access_token(last_token)
+    self.user_token = self.get_valid_access_token(token_type='user', token=last_user_token)
+    self.app_token = self.get_valid_access_token(token_type='app', token=last_app_token)
+
+    self._save_credentials()
 
   def _get(self, url, headers=None, queryparams=None):
     headers = headers or {
-      'Authorization': f'Bearer {self.token}',
+      # TODO - we should be smarter about whether to default app or user access token... or refactor entirely
+      'Authorization': f'Bearer {self.user_token}',
       'Accept': 'application/json',
       'Client-ID': self.client_id
     }
@@ -43,34 +49,37 @@ class TwitchAPI:
     response.raise_for_status()
     return response.json()
 
-  def _save_token(self, token):
+  def _save_credentials(self):
     creds = {
       'client_id': self.client_id,
       'client_secret': self.client_secret,
-      'access_token': token
+      'user_access_token': self.user_token,
+      'app_access_token': self.app_token
     }
     with open("api-creds.json", "w") as f:
       f.write(json.dumps(creds))
-    print("TwitchAPI: Token stored successfully.")
+    print("TwitchAPI: Credentials stored successfully.")
 
   def validate_token(self, token):
     bearer_token = f"Bearer {token}"
     return self._get(url="https://id.twitch.tv/oauth2/validate", headers={"Authorization": bearer_token})
 
-  def get_valid_access_token(self, token=None):
+  def get_valid_access_token(self, token_type: Literal['user', 'app'], token=None):
     if token:
       try:
         self.validate_token(token)
-        print('TwitchAPI: Token is valid.')
+        print(f'TwitchAPI: {token_type.capitalize()} access token is valid.')
         return token
       except HTTPError:
         pass
 
-    print('TwitchAPI: Token is invalid. Attempting to retrieve a new auth code.')
-    code = self.get_auth_code()
-    print("TwitchAPI: Exchanging code for token.")
-    token = self.exchange_auth_code_for_token(code)
-    self._save_token(token)
+    code = None
+    if token_type == 'user':
+      print('TwitchAPI: User token is invalid. Attempting to retrieve a new auth code.')
+      code = self.get_auth_code()
+
+    print(f"TwitchAPI: Attempting to retrieve a new {token_type} access_token.")
+    token = self.get_access_token(token_type, code)
     return token
 
   def get_auth_code(self):
@@ -113,16 +122,24 @@ class TwitchAPI:
     print("TwitchAPI: Socket closed.")
     return code
 
-  def exchange_auth_code_for_token(self, code):
+  def get_access_token(self, token_type: Literal['user', 'app'], code=None):
     params = {
       "client_id": self.client_id,
       "client_secret": self.client_secret,
-      "code": code,
-      "grant_type": "authorization_code",
       "redirect_uri": REDIRECT_URI
     }
+
+    if token_type == 'app':
+      # getting an app access token
+      params.update({"grant_type": "client_credentials"})
+    elif token_type == 'user' and code is not None:
+      # getting a user access token
+      params.update({"grant_type": "authorization_code", "code": code})
+    else:
+      raise AttributeError('Could not determine the type of access token to request.', token_type, code)
+
     response = self._post("https://id.twitch.tv/oauth2/token", queryparams=params)
-    print(f"TwitchAPI: Received token {response['access_token']}")
+    print(f"TwitchAPI: Received {token_type} access_token {response['access_token']}")
     return response['access_token']
 
   def get_channel(self):
