@@ -43,10 +43,10 @@ class TwitchAPI:
     self.hydra_server_api_key = hydra_server_api_key
     self.hydra_server_private_key = hydra_server_private_key
 
-  # TWITCH STUFF
+  # TWITCH STUFF #
+
   def _get_twitch(self, url, headers=None, queryparams=None, app=False):
     headers = headers or {
-      # TODO - we should be smarter about whether to default app or user access token... or refactor entirely
       'Authorization': f'Bearer {self.app_token if app else self.user_token}',
       'Accept': 'application/json',
       'Client-ID': self.client_id
@@ -165,7 +165,7 @@ class TwitchAPI:
     url = 'https://api.twitch.tv/helix/channels/'
     return self._get_twitch(url)
 
-  # HYDRA STUFF - (could probably get broken out to own class)
+  # HYDRA STUFF - (could probably get broken out to own class) #
 
   def _get_hydra(self, url, headers=None, queryparams=None):
     headers = headers or {
@@ -191,3 +191,29 @@ class TwitchAPI:
       else:
         print(f"TwitchAPI: Failed communicating to Hydra.")
       return
+
+  def _put_hydra(self, url, body=None, headers=None, queryparams=None):
+    headers = headers or {
+      'Accept': 'application/json',
+      'x-hydra-api-key': self.hydra_server_api_key,
+      'x-hydra-server-private-key': self.hydra_server_private_key
+    }
+    response = requests.put(url, json=body, headers=headers, params=queryparams)
+    response.raise_for_status()
+    return response.json()
+
+  def hydra_ban(self, hydra_account_id, reason=None, duration=1, units='minutes'):
+    url = f"{self.hydra_base_url}/accounts/{hydra_account_id}/ban"
+    body = {}
+    if reason:
+      body['data'] = {'reason': reason}
+    if duration:
+      body['duration'] = duration
+      body['units'] = units
+    try:
+      self._put_hydra(url, body=body)
+      print(f"TwitchAPI: Successfully banned Hydra account {hydra_account_id}")
+    except HTTPError:
+      # oh well, we tried
+      print(f"TwitchAPI: Ban for Hydra account {hydra_account_id} failed due to an HTTP error.")
+

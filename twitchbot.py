@@ -29,6 +29,10 @@ COLORS = [
   'SeaGreen', 'Chocolate', 'BlueViolet', 'Firebrick'
 ]
 
+BAD_WORDS = {
+  'poop'
+}
+
 
 class TwitchBot(irc.bot.SingleServerIRCBot):
 
@@ -61,10 +65,6 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
     print(f"ChrisBadaBot: on_motd...")
     self.connection.privmsg(self.channel, f'Message of the Day: {random.choice(MOTDS)}')
 
-  def on_part(self, conn, event):
-    print('ChrisBadaBot: on_part...')
-    self.connection.part([self.channel], 'Peace out cub scouts!')
-
   def on_pubmsg(self, conn, event):
     print('ChrisBadaBot: on_pubmsg...')
     if event.arguments[0][:1] == '!':
@@ -72,9 +72,15 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
       cmd = event.arguments[0].split(' ')[0][1:]
       print(f'ChrisBadaBot: Received command: {cmd}')
       self.execute_command(event, cmd)
+    else:
+      if self.check_for_bad_mouth(conn, event):
+        hydra_account = self.twitch.get_hydra_account(self.get_user_id_from_event(event))
+        self.twitch.hydra_ban(hydra_account['id'], reason='potty mouth!')
+        self.connection.privmsg(self.channel, f"{event.source.user} - Congratulations, you played yourself. (TEMP BAN IN-GAME for potty mouth).")
 
   def execute_command(self, event, cmd):
     print('ChrisBadaBot: execute_command...')
+    twitch_user_id = self.get_user_id_from_event(event)
 
     if cmd == 'test':
       self.connection.privmsg(self.channel, 'Test PASSED with flying colors!')
@@ -87,8 +93,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
         self.connection.privmsg(self.channel, "Whoops, something went wrong.")
 
     elif cmd == "hydra-account":
-      user_id = self.get_user_id_from_event(event)
-      hydra_account = self.twitch.get_hydra_account(user_id)
+      hydra_account = self.twitch.get_hydra_account(twitch_user_id)
       if hydra_account:
         self.connection.privmsg(self.channel, f"Your Hydra Username is '{hydra_account['identity']['username']}'")
       else:
@@ -125,6 +130,17 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
       # The command was not recognized
       self.connection.privmsg(self.channel, f"{cmd} does not compute...")
 
+  def check_for_bad_mouth(self, conn, event):
+    # if any(["bad word" in arg.lower() for arg in event.arguments]):
+    # if bool(BAD_WORDS.intersection(even.))  # empty set is False
+    match = False
+    for arg in event.arguments:
+      for bw in BAD_WORDS:
+        if bw in arg:
+          match = True
+          break
+    return match
+
   def get_user_id_from_event(self, event):
     user_id = [tag['value'] for tag in event.tags if tag['key'] == 'user-id'][0]  # there should only be one user-id tag
     print(f"ChrisBadaBot: Found Twitch UserID: {user_id}")
@@ -136,8 +152,7 @@ def main():
   try:
     bot.start()
   except KeyboardInterrupt:
-    bot.on_part(None, None)  # TODO not working
-    print('ChrisBadaBot: We outtie!')
+    bot.die()
 
 
 if __name__ == "__main__":
