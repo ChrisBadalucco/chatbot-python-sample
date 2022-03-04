@@ -1,6 +1,6 @@
-##HACKATHON MARCH 2022 NOTES
+## HACKATHON MARCH 2022 NOTES
 
-###Goals:
+### Goals:
 1. Connect to a Twitch channel chat via IRC
 2. Code up a basic chat bot and get it working against my Twitch channel.
 3. Setup proper auth flows for the chat bot.
@@ -9,7 +9,7 @@ Stretch Goals:
 4. See if I can integrate with Hydra (grant a player an item?)
 5. Deploy it to the cloud?
 ----------------------------------------
-###How far I got:
+### How far I got:
 1. Twitch Chat via IRC
     * IRC is the backbone for Twitch bots
     * Can also be used as an alternative to the web interface for normal chat
