@@ -29,13 +29,25 @@ class TwitchAPI:
     self.client_secret = client_secret
     self.user_token = self.get_valid_access_token(token_type='user', token=last_user_token)
     self.app_token = self.get_valid_access_token(token_type='app', token=last_app_token)
-
     self._save_credentials()
 
-  def _get(self, url, headers=None, queryparams=None):
+    filepath = 'hydra-creds.json'
+    if os.path.isfile(filepath):
+      with open(filepath, 'r') as file:
+        hydra_creds = json.load(file)
+        hydra_base_url = hydra_creds['url']
+        hydra_server_api_key = hydra_creds['server_api_key']
+        hydra_server_private_key = hydra_creds['server_private_key']
+
+    self.hydra_base_url = hydra_base_url
+    self.hydra_server_api_key = hydra_server_api_key
+    self.hydra_server_private_key = hydra_server_private_key
+
+  # TWITCH STUFF
+  def _get_twitch(self, url, headers=None, queryparams=None, app=False):
     headers = headers or {
       # TODO - we should be smarter about whether to default app or user access token... or refactor entirely
-      'Authorization': f'Bearer {self.user_token}',
+      'Authorization': f'Bearer {self.app_token if app else self.user_token}',
       'Accept': 'application/json',
       'Client-ID': self.client_id
     }
@@ -43,7 +55,7 @@ class TwitchAPI:
     response.raise_for_status()
     return response.json()
 
-  def _post(self, url, body=None, headers=None, queryparams=None):
+  def _post_twitch(self, url, body=None, headers=None, queryparams=None):
     headers = headers or {'Accept': 'application/json'}
     response = requests.post(url, json=body, headers=headers, params=queryparams)
     response.raise_for_status()
@@ -62,7 +74,7 @@ class TwitchAPI:
 
   def validate_token(self, token):
     bearer_token = f"Bearer {token}"
-    return self._get(url="https://id.twitch.tv/oauth2/validate", headers={"Authorization": bearer_token})
+    return self._get_twitch(url="https://id.twitch.tv/oauth2/validate", headers={"Authorization": bearer_token})
 
   def get_valid_access_token(self, token_type: Literal['user', 'app'], token=None):
     if token:
@@ -138,10 +150,44 @@ class TwitchAPI:
     else:
       raise AttributeError('Could not determine the type of access token to request.', token_type, code)
 
-    response = self._post("https://id.twitch.tv/oauth2/token", queryparams=params)
+    response = self._post_twitch("https://id.twitch.tv/oauth2/token", queryparams=params)
     print(f"TwitchAPI: Received {token_type} access_token {response['access_token']}")
     return response['access_token']
 
+  def get_twitch_account(self, username):
+    url = 'https://api.twitch.tv/helix/users'
+    queryparams = {'login': username}
+    response = self._get_twitch(url, queryparams=queryparams, app=True)
+    print(f"TwitchAPI: Successfully retrieved Twitch account for {username}", response)
+    return response
+
   def get_channel(self):
     url = 'https://api.twitch.tv/helix/channels/'
-    return self._get(url)
+    return self._get_twitch(url)
+
+  # HYDRA STUFF - (could probably get broken out to own class)
+
+  def _get_hydra(self, url, headers=None, queryparams=None):
+    headers = headers or {
+      'Accept': 'application/json',
+      'x-hydra-api-key': self.hydra_server_api_key,
+      'x-hydra-server-private-key': self.hydra_server_private_key
+    }
+    response = requests.get(url, headers=headers, params=queryparams)
+    response.raise_for_status()
+    return response.json()
+
+  def get_hydra_version(self):
+    return requests.get(url=f'{self.hydra_base_url}/health/version')
+
+  def get_hydra_account(self, twitch_user_id):
+    try:
+      response = self._get_hydra(url=f"{self.hydra_base_url}/accounts/twitch/{twitch_user_id}")
+      print(f"TwitchAPI: Successfully retrieved Hydra account for {twitch_user_id}.", response)
+      return response
+    except HTTPError as e:
+      if e.response.status_code == 404:
+        print(f"TwitchAPI: No Hydra account found for {twitch_user_id}.")
+      else:
+        print(f"TwitchAPI: Failed communicating to Hydra.")
+      return

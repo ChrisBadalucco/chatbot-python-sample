@@ -23,31 +23,14 @@ MOTDS = [
   'Accept who you are. Unless you are a serial killer.',
   'If a book about failures does not sell, is it a success?'
 ]
+COLORS = [
+  'Blue', 'Coral', 'DodgerBlue', 'SpringGreen', 'YellowGreen',
+  'Green', 'OrangeRed', 'Red', 'GoldenRod', 'HotPink', 'CadetBlue',
+  'SeaGreen', 'Chocolate', 'BlueViolet', 'Firebrick'
+]
 
 
 class TwitchBot(irc.bot.SingleServerIRCBot):
-  '''
-  From irc/client.py:
-
-  class SimpleIRCClient:
-    """A simple single-server IRC client class.
-
-    This is an example of an object-oriented wrapper of the IRC
-    framework.  A real IRC client can be made by subclassing this
-    class and adding appropriate methods.
-
-    The method on_join will be called when a "join" event is created
-    (which is done when the server sends a JOIN messsage/command),
-    on_privmsg will be called for "privmsg" events, and so on.  The
-    handler methods get two arguments: the connection object (same as
-    self.connection) and the event object.
-
-    Functionally, any of the event names in `events.py` may be subscribed
-    to by prefixing them with `on_`, and creating a function of that
-    name in the child-class of `SimpleIRCClient`. When the event of
-    `event_name` is received, the appropriately named method will be
-    called (if it exists) by runtime class introspection.
-  '''
 
   def __init__(self):
     filepath = 'bot-creds.json'
@@ -79,7 +62,6 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
     self.connection.privmsg(self.channel, f'Message of the Day: {random.choice(MOTDS)}')
 
   def on_part(self, conn, event):
-    # self.connection.privmsg(self.channel, 'peace out cub scouts')
     print('ChrisBadaBot: on_part...')
     self.connection.part([self.channel], 'Peace out cub scouts!')
 
@@ -97,28 +79,56 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
     if cmd == 'test':
       self.connection.privmsg(self.channel, 'Test PASSED with flying colors!')
 
+    elif cmd == 'account':
+      twitch_account = self.twitch.get_twitch_account(event.source.user)
+      if twitch_account:
+        self.connection.privmsg(self.channel, f"Your Username is '{twitch_account['data'][0]['display_name']}'... but you already knew that didn't you ;)")
+      else:
+        self.connection.privmsg(self.channel, "Whoops, something went wrong.")
+
+    elif cmd == "hydra-account":
+      user_id = self.get_user_id_from_event(event)
+      hydra_account = self.twitch.get_hydra_account(user_id)
+      if hydra_account:
+        self.connection.privmsg(self.channel, f"Your Hydra Username is '{hydra_account['identity']['username']}'")
+      else:
+        self.connection.privmsg(self.channel, "Whoops, something went wrong.")
+
+    elif cmd == 'praise-bot':
+      # TODO inc profile.data.twitch_praise
+      pass
+
     elif cmd == "game":
-      # Poll the API to get current game.
       response = self.twitch.get_channel()
       self.connection.privmsg(self.channel, f"{response['display_name']} is currently playing{response['game']}")
 
     elif cmd == "title":
-      # Poll the API the get the current status of the stream
-      response = self.twitch.get_channel()
-      self.connection.privmsg(self.channel, f"{response['display_name']} channel title is currently {response['status']}")
+      self.connection.privmsg(self.channel, "this uh, doesnt work yet")
+      # TODO response = self.twitch.get_channel()
+      #  self.connection.privmsg(self.channel, f"{response['display_name']} channel title is currently {response['status']}")
 
-    elif cmd == "raffle":
-      # Provide basic information to viewers for specific commands
-      message = "This is an example bot, replace this text with your raffle text."
-      self.connection.privmsg(self.channel, message)
+    elif cmd == "color":
+      color = random.choice(COLORS)
+      self.connection.privmsg(self.channel, f"/color {color}")
+      self.connection.privmsg(self.channel, f"{event.source.user} asked me to change my color to {color}")
 
-    elif cmd == "schedule":
-      message = "This is an example bot, replace this text with your schedule text."
-      self.connection.privmsg(self.channel, message)
+    elif cmd == "hydra-version":
+      response = self.twitch.get_hydra_version()
+      if response.status_code != 200:
+        self.connection.privmsg(self.channel, 'Whoops, something went wrong. Try again later.')
+        return
+
+      response = response.json()
+      self.connection.privmsg(self.channel, f"Hydra is currently on version {response['version']}")
 
     else:
       # The command was not recognized
-      self.connection.privmsg(self.channel, f"Did not understand command: {cmd}")
+      self.connection.privmsg(self.channel, f"{cmd} does not compute...")
+
+  def get_user_id_from_event(self, event):
+    user_id = [tag['value'] for tag in event.tags if tag['key'] == 'user-id'][0]  # there should only be one user-id tag
+    print(f"ChrisBadaBot: Found Twitch UserID: {user_id}")
+    return user_id
 
 
 def main():
