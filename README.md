@@ -16,4 +16,8 @@ $ python twitchbot.py
 ```
 
 ## Next Steps
-Feel free to augment the chatbot with your own new commands by adding them in the do_command() function. 
+Feel free to augment the chatbot with your own new commands by adding them in the execute() function. 
+
+
+## Checkout the Hackathon Notes
+[Link](HACKATHON.md)
